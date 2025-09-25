@@ -9,6 +9,7 @@ import { DollarSign, TrendingUp, TrendingDown, Scale, type LucideIcon, Loader2 }
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, ResponsiveContainer, Legend } from "recharts"
 import { salesService, expensesService } from '@/lib/supabase-services';
+import { PE_TZ, toStartOfDayPE, daysAgoPE } from '@/lib/timezone';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 
@@ -47,6 +48,10 @@ interface DashboardData {
   monthlyExpenses: number;
   monthlyProfit: number;
   profitMargin: number;
+  dailyRevenue: number;
+  weeklyRevenue: number;
+  dailyExpenses: number;
+  weeklyExpenses: number;
   lifetimeRevenue: number;
   lifetimeExpenses: number;
   lifetimeBalance: number;
@@ -97,10 +102,12 @@ export default function DashboardPage() {
   useEffect(() => {
     const loadDashboardData = async () => {
       try {
-        const now = new Date();
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        const last30Days = new Date(now);
-        last30Days.setDate(now.getDate() - 30);
+  const now = new Date();
+  const todayStart = toStartOfDayPE(now);
+  const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
+  const last30Days = daysAgoPE(30);
+  // Semana móvil (últimos 7 días incluyendo hoy)
+  const weekStart = daysAgoPE(6);
 
         // Cargar datos del mes actual
         const [monthSales, monthExpenses, dailySales, dailyExpenses, allSales, allExpenses] = await Promise.all([
@@ -117,22 +124,36 @@ export default function DashboardPage() {
         const monthlyProfit = monthlyRevenue - monthlyExpenses;
         const profitMargin = monthlyRevenue > 0 ? (monthlyProfit / monthlyRevenue) * 100 : 0;
 
+        // Cálculos diario y semanal usando listas de últimos 30 días
+        const dailyRevenue = dailySales
+          .filter((s) => toStartOfDayPE(new Date(s.date)).getTime() === todayStart.getTime())
+          .reduce((sum, s) => sum + s.total, 0);
+        const dailyExpensesSum = dailyExpenses
+          .filter((e) => toStartOfDayPE(new Date(e.date)).getTime() === todayStart.getTime())
+          .reduce((sum, e) => sum + e.amount, 0);
+
+        const weeklyRevenue = dailySales
+          .filter((s) => toStartOfDayPE(new Date(s.date)) >= weekStart)
+          .reduce((sum, s) => sum + s.total, 0);
+        const weeklyExpenses = dailyExpenses
+          .filter((e) => toStartOfDayPE(new Date(e.date)) >= weekStart)
+          .reduce((sum, e) => sum + e.amount, 0);
+
         // Crear datos para el gráfico
         const chartData = Array.from({ length: 30 }).map((_, i) => {
           const date = new Date();
           date.setDate(date.getDate() - (29 - i));
-          const dayStr = date.toISOString().split('T')[0];
-          
+          const dayStart = toStartOfDayPE(date);
           const dayIncome = dailySales
-            .filter(sale => new Date(sale.date).toISOString().split('T')[0] === dayStr)
+            .filter(sale => toStartOfDayPE(new Date(sale.date)).getTime() === dayStart.getTime())
             .reduce((sum, sale) => sum + sale.total, 0);
           
           const dayExpenses = dailyExpenses
-            .filter(expense => new Date(expense.date).toISOString().split('T')[0] === dayStr)
+            .filter(expense => toStartOfDayPE(new Date(expense.date)).getTime() === dayStart.getTime())
             .reduce((sum, expense) => sum + expense.amount, 0);
 
           return {
-            date: new Intl.DateTimeFormat('es-PE', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(date),
+            date: new Intl.DateTimeFormat('es-PE', { month: 'short', day: 'numeric', timeZone: PE_TZ }).format(date),
             income: dayIncome,
             expenses: dayExpenses,
           };
@@ -144,7 +165,11 @@ export default function DashboardPage() {
         const lifetimeBalance = lifetimeRevenue - lifetimeExpenses;
 
         setDashboardData({
+          dailyRevenue,
+          weeklyRevenue,
           monthlyRevenue,
+          dailyExpenses: dailyExpensesSum,
+          weeklyExpenses,
           monthlyExpenses,
           monthlyProfit,
           profitMargin,
@@ -192,33 +217,68 @@ export default function DashboardPage() {
     <>
       <PageHeader title={`¡Bienvenido, ${user?.name.split(' ')[0]}!`} description="Aquí tienes un resumen de las finanzas de tu negocio." />
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard 
-          title="Beneficio Neto" 
-          subtitle="Este Mes"
-          value={formatCurrency(dashboardData.monthlyProfit)} 
-          icon={DollarSign} 
-          description={`Margen: ${dashboardData.profitMargin.toFixed(1)}%`} 
+        {/* Ingresos */}
+        <StatCard
+          title="Ingresos"
+          subtitle="Hoy"
+          value={formatCurrency(dashboardData.dailyRevenue)}
+          icon={TrendingUp}
+          description="Ventas de hoy"
         />
-        <StatCard 
-          title="Ingresos" 
-          subtitle="Este Mes"
-          value={formatCurrency(dashboardData.monthlyRevenue)} 
-          icon={TrendingUp} 
-          description="Ventas del mes actual" 
+        <StatCard
+          title="Ingresos"
+          subtitle="Últimos 7 días"
+          value={formatCurrency(dashboardData.weeklyRevenue)}
+          icon={TrendingUp}
+          description="Ventas de la semana"
         />
-        <StatCard 
-          title="Gastos" 
+        <StatCard
+          title="Ingresos"
           subtitle="Este Mes"
-          value={formatCurrency(dashboardData.monthlyExpenses)} 
-          icon={TrendingDown} 
-          description="Gastos del mes actual" 
+          value={formatCurrency(dashboardData.monthlyRevenue)}
+          icon={TrendingUp}
+          description="Ventas del mes actual"
         />
-        <StatCard 
-          title="Balance Total" 
+
+        {/* Beneficio Neto del mes */}
+        <StatCard
+          title="Beneficio Neto"
+          subtitle="Este Mes"
+          value={formatCurrency(dashboardData.monthlyProfit)}
+          icon={DollarSign}
+          description={`Margen: ${dashboardData.profitMargin.toFixed(1)}%`}
+        />
+
+        {/* Gastos */}
+        <StatCard
+          title="Gastos"
+          subtitle="Hoy"
+          value={formatCurrency(dashboardData.dailyExpenses)}
+          icon={TrendingDown}
+          description="Gastos de hoy"
+        />
+        <StatCard
+          title="Gastos"
+          subtitle="Últimos 7 días"
+          value={formatCurrency(dashboardData.weeklyExpenses)}
+          icon={TrendingDown}
+          description="Gastos de la semana"
+        />
+        <StatCard
+          title="Gastos"
+          subtitle="Este Mes"
+          value={formatCurrency(dashboardData.monthlyExpenses)}
+          icon={TrendingDown}
+          description="Gastos del mes actual"
+        />
+
+        {/* Balance total desde inicio */}
+        <StatCard
+          title="Balance Total"
           subtitle="Desde Inicio"
-          value={formatCurrency(dashboardData.lifetimeBalance)} 
-          icon={Scale} 
-          description="Ingresos acumulados - Gastos acumulados" 
+          value={formatCurrency(dashboardData.lifetimeBalance)}
+          icon={Scale}
+          description="Ingresos acumulados - Gastos acumulados"
         />
       </div>
       <div className="mt-8 grid grid-cols-1 gap-8">

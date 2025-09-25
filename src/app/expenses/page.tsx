@@ -51,6 +51,10 @@ export default function ExpensesPage() {
   const [rowSaving, setRowSaving] = useState(false);
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
+  // Estado para Registro Manual Diario de gastos
+  const [manualAmount, setManualAmount] = useState<string>('');
+  const [manualNotes, setManualNotes] = useState<string>('');
+  const [manualLoading, setManualLoading] = useState(false);
 
   const newIntl = new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' });
 
@@ -142,6 +146,49 @@ export default function ExpensesPage() {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const isSameDay = (a: Date, b: Date) => {
+    const aa = new Date(a); const bb = new Date(b);
+    return aa.getFullYear() === bb.getFullYear() && aa.getMonth() === bb.getMonth() && aa.getDate() === bb.getDate();
+  };
+
+  const submitManualDailyExpense = async () => {
+    if (!user) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Debes iniciar sesión.' });
+      return;
+    }
+    const amount = Number(manualAmount);
+    if (!amount || amount <= 0) {
+      toast({ variant: 'destructive', title: 'Monto inválido', description: 'Ingresa un monto mayor a 0.' });
+      return;
+    }
+    // Evitar duplicado de registro manual del día
+    const existsToday = expenses.some(e => e.description === 'Registro Manual Diario (Gasto)' && isSameDay(new Date(e.date), new Date()));
+    if (existsToday) {
+      toast({ variant: 'destructive', title: 'Registro ya existe', description: 'Ya registraste un gasto manual para hoy. Elimina el existente para registrar uno nuevo.' });
+      return;
+    }
+    setManualLoading(true);
+    try {
+      const newExpense = await expensesService.createExpense({
+        description: 'Registro Manual Diario (Gasto)',
+        amount,
+        categoryId: null as any,
+        categoryName: null as any,
+        recordedBy: user.id,
+        date: new Date(),
+        notes: manualNotes || 'Gasto manual diario',
+      } as any);
+      setExpenses(prev => [newExpense, ...prev]);
+      toast({ title: 'Registro guardado', description: 'Se registró el gasto manual del día.' });
+      setManualAmount('');
+      setManualNotes('');
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Error', description: error?.message || 'No se pudo registrar el gasto manual.' });
+    } finally {
+      setManualLoading(false);
     }
   };
 
@@ -270,6 +317,30 @@ export default function ExpensesPage() {
               </Form>
             </CardContent>
           </Card>
+          {/* Registro Manual Diario de Gasto */}
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle>Registro Manual Diario (Gasto)</CardTitle>
+              <CardDescription>Ingresa el monto total de gasto del día (si no registraste por categoría).</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-sm font-medium">Monto del día (S/.)</label>
+                  <Input type="number" min="0" step="0.01" value={manualAmount} onChange={(e) => setManualAmount(e.target.value)} placeholder="0.00" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Notas (opcional)</label>
+                  <Input value={manualNotes} onChange={(e) => setManualNotes(e.target.value)} placeholder="Ej. total según cuaderno" />
+                </div>
+                <Button className="w-full" onClick={submitManualDailyExpense} disabled={manualLoading}>
+                  {manualLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
+                  Guardar Gasto Manual
+                </Button>
+                <p className="text-xs text-muted-foreground">Solo se permite un registro manual por día. Para corregir, elimina el existente.</p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
         <div className="md:col-span-2">
           <Card>
@@ -332,7 +403,7 @@ export default function ExpensesPage() {
                           )}
                         </TableCell>
                         <TableCell>
-                          {new Intl.DateTimeFormat('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' }).format(new Date(expense.date))}
+                          {new Intl.DateTimeFormat('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Lima' }).format(new Date(expense.date))}
                         </TableCell>
                         <TableCell>
                           {editingId === expense.id ? (
@@ -411,7 +482,7 @@ export default function ExpensesPage() {
                       <div className="mt-2 flex items-center justify-between text-sm">
                         <div className="flex items-center gap-2">
                           <span className="text-muted-foreground">Fecha:</span>
-                          <span>{new Intl.DateTimeFormat('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' }).format(new Date(expense.date))}</span>
+                          <span>{new Intl.DateTimeFormat('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Lima' }).format(new Date(expense.date))}</span>
                         </div>
                         <div className="flex gap-2">
                           {editingId === expense.id ? (

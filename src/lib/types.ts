@@ -17,7 +17,7 @@ export interface Product {
 
 export interface Sale {
   id: string;
-  productId: string;
+  productId: string | null; // puede ser null para registros manuales
   productName: string;
   quantity: number;
   unitPrice: number;
@@ -45,8 +45,8 @@ export interface Expense {
   id: string;
   description: string;
   amount: number;
-  categoryId: string;
-  categoryName: string;
+  categoryId: string | null;
+  categoryName: string | null;
   date: Date;
   recordedBy: string;
   notes?: string;

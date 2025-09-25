@@ -29,7 +29,7 @@ export function AIAdvisor({ weeklyData, generateSignal, breakdown }: AIAdvisorPr
   const [aiConfigured, setAiConfigured] = useState(true);
   const { toast } = useToast();
 
-  const currentMonth = new Intl.DateTimeFormat('es-PE', { month: 'long', timeZone: 'UTC' }).format(new Date());
+  const currentMonth = new Intl.DateTimeFormat('es-PE', { month: 'long', timeZone: 'America/Lima' }).format(new Date());
   const formatter = new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' });
 
   const generateAdvice = async () => {

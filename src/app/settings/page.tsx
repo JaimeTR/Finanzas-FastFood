@@ -97,7 +97,7 @@ export default function SettingsPage() {
                   <TableRow key={log.id}>
                     <TableCell className="font-medium">{log.action}</TableCell>
                     <TableCell title={log.details || ''}>{log.userId}</TableCell>
-                    <TableCell>{new Intl.DateTimeFormat('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' }).format(new Date(log.date))}</TableCell>
+                    <TableCell>{new Intl.DateTimeFormat('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Lima' }).format(new Date(log.date))}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

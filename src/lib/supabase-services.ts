@@ -68,7 +68,7 @@ function transformSupabaseDistributionType(row: any): DistributionType {
 function transformSupabaseSale(sale: any): Sale {
   return {
     id: sale.id,
-    productId: sale.product_id,
+    productId: sale.product_id ?? null,
     productName: sale.product_name,
     quantity: sale.quantity,
     unitPrice: parseFloat(sale.unit_price),
@@ -84,8 +84,8 @@ function transformSupabaseExpense(expense: any): Expense {
     id: expense.id,
     description: expense.description,
     amount: parseFloat(expense.amount),
-    categoryId: expense.category_id,
-    categoryName: expense.category_name,
+    categoryId: expense.category_id ?? null,
+    categoryName: expense.category_name ?? null,
     date: parseDbTimestampToLocal(expense.date),
     recordedBy: expense.recorded_by,
     notes: expense.notes
@@ -442,19 +442,21 @@ export const salesService = {
 
   async createSale(sale: Omit<Sale, 'id'>): Promise<Sale> {
     const id = 'sale_' + Date.now();
+    const row: any = {
+      id,
+      product_name: sale.productName,
+      quantity: sale.quantity,
+      unit_price: sale.unitPrice,
+      total: sale.total,
+      date: toLocalISOStringNoZ(sale.date),
+      recorded_by: sale.recordedBy,
+      notes: sale.notes
+    };
+    if (sale.productId) row.product_id = sale.productId;
+
     const { data, error } = await supabase
       .from('sales')
-      .insert({
-        id,
-        product_id: sale.productId,
-        product_name: sale.productName,
-        quantity: sale.quantity,
-        unit_price: sale.unitPrice,
-        total: sale.total,
-        date: toLocalISOStringNoZ(sale.date),
-        recorded_by: sale.recordedBy,
-        notes: sale.notes
-      })
+      .insert(row as any)
       .select()
       .single()
 
@@ -521,18 +523,20 @@ export const expensesService = {
 
   async createExpense(expense: Omit<Expense, 'id'>): Promise<Expense> {
     const id = 'exp_' + Date.now();
+    const row: any = {
+      id,
+      description: expense.description,
+      amount: expense.amount,
+      date: toLocalISOStringNoZ(expense.date),
+      recorded_by: expense.recordedBy,
+      notes: expense.notes
+    };
+    if (expense.categoryId) row.category_id = expense.categoryId;
+    if (expense.categoryName) row.category_name = expense.categoryName;
+
     const { data, error } = await supabase
       .from('expenses')
-      .insert({
-        id,
-        description: expense.description,
-        amount: expense.amount,
-        category_id: expense.categoryId,
-        category_name: expense.categoryName,
-        date: toLocalISOStringNoZ(expense.date),
-        recorded_by: expense.recordedBy,
-        notes: expense.notes
-      })
+      .insert(row as any)
       .select()
       .single()
 

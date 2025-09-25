@@ -46,6 +46,10 @@ export default function SalesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editQuantity, setEditQuantity] = useState<string>('');
   const [rowSaving, setRowSaving] = useState(false);
+  // Estado para Registro Manual Diario
+  const [manualAmount, setManualAmount] = useState<string>('');
+  const [manualNotes, setManualNotes] = useState<string>('');
+  const [manualLoading, setManualLoading] = useState(false);
 
   const newIntl = new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' });
 
@@ -85,13 +89,18 @@ export default function SalesPage() {
   const filteredSales = sales.filter((s) => {
     const q = query.trim().toLowerCase();
     if (!q) return true;
-    const dateStr = new Intl.DateTimeFormat('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' }).format(new Date(s.date));
+  const dateStr = new Intl.DateTimeFormat('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Lima' }).format(new Date(s.date));
     return (
       s.productName.toLowerCase().includes(q) ||
       String(s.total).includes(q) ||
       dateStr.includes(q)
     );
   });
+
+  const isSameDay = (a: Date, b: Date) => {
+    const aa = new Date(a); const bb = new Date(b);
+    return aa.getFullYear() === bb.getFullYear() && aa.getMonth() === bb.getMonth() && aa.getDate() === bb.getDate();
+  };
 
   const onSubmit = async (data: SaleFormValues) => {
     setIsLoading(true);
@@ -138,6 +147,48 @@ export default function SalesPage() {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const submitManualDaily = async () => {
+    if (!user) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Debes iniciar sesión.' });
+      return;
+    }
+    const amount = Number(manualAmount);
+    if (!amount || amount <= 0) {
+      toast({ variant: 'destructive', title: 'Monto inválido', description: 'Ingresa un monto mayor a 0.' });
+      return;
+    }
+    // Evitar duplicado de registro manual del día
+    const existsToday = sales.some(s => s.productName === 'Registro Manual Diario' && isSameDay(new Date(s.date), new Date()));
+    if (existsToday) {
+      toast({ variant: 'destructive', title: 'Registro ya existe', description: 'Ya registraste un monto manual para hoy. Elimina el existente para registrar uno nuevo.' });
+      return;
+    }
+    setManualLoading(true);
+    try {
+      const payload = {
+        productId: null,
+        productName: 'Registro Manual Diario',
+        unitPrice: amount,
+        quantity: 1,
+        total: amount,
+        recordedBy: user.id,
+        date: new Date(),
+        notes: manualNotes || 'Ingreso manual diario',
+      } as Omit<Sale, 'id'>;
+
+      const newSale = await salesService.createSale(payload);
+      setSales(prev => [newSale, ...prev]);
+      addAuditLog('Registro Manual Diario', `Ingreso manual por ${newIntl.format(amount)}`);
+      toast({ title: 'Registro guardado', description: 'Se registró el ingreso manual del día.' });
+      setManualAmount('');
+      setManualNotes('');
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Error', description: error?.message || 'No se pudo registrar el monto manual.' });
+    } finally {
+      setManualLoading(false);
     }
   };
 
@@ -248,6 +299,30 @@ export default function SalesPage() {
               </Form>
             </CardContent>
           </Card>
+          {/* Registro Manual Diario */}
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle>Registro Manual Diario</CardTitle>
+              <CardDescription>Ingresa el monto total del día (si no registraste por producto).</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-sm font-medium">Monto del día (S/.)</label>
+                  <Input type="number" min="0" step="0.01" value={manualAmount} onChange={(e) => setManualAmount(e.target.value)} placeholder="0.00" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Notas (opcional)</label>
+                  <Input value={manualNotes} onChange={(e) => setManualNotes(e.target.value)} placeholder="Ej. total según cuaderno" />
+                </div>
+                <Button className="w-full" onClick={submitManualDaily} disabled={manualLoading}>
+                  {manualLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
+                  Guardar Registro Manual
+                </Button>
+                <p className="text-xs text-muted-foreground">Solo se permite un registro manual por día. Para corregir, elimina el existente.</p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
         <div className="md:col-span-2">
           <Card>
@@ -289,7 +364,7 @@ export default function SalesPage() {
                         </TableCell>
                         <TableCell>{newIntl.format(sale.total)}</TableCell>
                         <TableCell>
-                          {new Intl.DateTimeFormat('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' }).format(new Date(sale.date))}
+                          {new Intl.DateTimeFormat('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Lima' }).format(new Date(sale.date))}
                         </TableCell>
                         <TableCell>
                           {editingId === sale.id ? (
@@ -361,7 +436,7 @@ export default function SalesPage() {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="font-medium">{sale.productName}</p>
-                          <p className="text-sm text-muted-foreground">{new Intl.DateTimeFormat('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' }).format(new Date(sale.date))}</p>
+                          <p className="text-sm text-muted-foreground">{new Intl.DateTimeFormat('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Lima' }).format(new Date(sale.date))}</p>
                         </div>
                         <div className="font-semibold">{newIntl.format(sale.total)}</div>
                       </div>
